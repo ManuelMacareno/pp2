@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% block content %}
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .player-card {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .player-card:hover {
+            background-color: #f8f9fa;
+        }
+        .player-card.selected {
+            background-color: #e2e6ea;
+            pointer-events: none;
+        }
+        .position-badge {
+            background-color: #007bff;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 8px;
+            font-size: 0.8em;
+        }
+        .stats-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .search-message {
+            color: #666;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <form id="equipoForm" class="mb-4">
+                    <div class="form-group mb-3">
+                        <label for="teamName">Nombre del Equipo</label>
+                        <input type="text" class="form-control" id="teamName" required>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="searchPlayer">Buscar Jugadores</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="searchPlayer" 
+                               placeholder="Escribe al menos 3 letras para buscar...">
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="positionFilter">Posición</label>
+                        <select class="form-control" id="positionFilter">
+                            <option value="">Todas las posiciones</option>
+                            <option value="Base">Base</option>
+                            <option value="Escolta">Escolta</option>
+                            <option value="Alero">Alero</option>
+                            <option value="Ala-pívot">Ala-pívot</option>
+                            <option value="Pívot">Pívot</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div id="searchResults" class="mb-4">
+                    <div class="search-message">
+                        Utiliza el buscador para encontrar jugadores
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Titulares</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="titularesContainer"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Suplentes</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="suplentesContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12 text-center">
+                <button id="saveTeam" class="btn btn-primary">Guardar Equipo</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const posiciones = ['Base', 'Escolta', 'Alero', 'Ala-pívot', 'Pívot'];
+            let equipoActual = {
+                titulares: Array(5).fill(null),
+                suplentes: Array(5).fill(null)
+            };
+            let jugadoresCargados = [];
+
+            const searchInput = document.getElementById('searchPlayer');
+            const positionFilter = document.getElementById('positionFilter');
+            const searchResults = document.getElementById('searchResults');
+            const saveTeamButton = document.getElementById('saveTeam');
+
+            // Event listeners
+            searchInput.addEventListener('input', buscarJugadores);
+            positionFilter.addEventListener('change', buscarJugadores);
+            saveTeamButton.addEventListener('click', guardarEquipo);
+
+            async function buscarJugadores() {
+                const searchTerm = searchInput.value.trim().toLowerCase();
+                const positionTerm = positionFilter.value;
+
+                // Si el término de búsqueda tiene menos de 3 caracteres y no hay filtro de posición
+                if (searchTerm.length < 3 && !positionTerm) {
+                    searchResults.innerHTML = `
+                        <div class="search-message">
+                            Escribe al menos 3 letras para buscar jugadores
+                        </div>
+                    `;
+                    return;
+                }
+
+                try {
+                    // Si hay un filtro de posición, usamos ese endpoint
+                    if (positionTerm) {
+                        const response = await fetch(`/api/jugadores_por_posicion/${encodeURIComponent(positionTerm)}`);
+                        jugadoresCargados = await response.json();
+                    } else {
+                        // Si no hay filtro de posición, obtenemos todos los jugadores
+                        const response = await fetch('/api/jugadores');
+                        jugadoresCargados = await response.json();
+                    }
+
+                    // Filtramos por el término de búsqueda
+                    const jugadoresFiltrados = jugadoresCargados.filter(jugador => 
+                        jugador.nombre.toLowerCase().includes(searchTerm)
+                    );
+
+                    mostrarResultadosBusqueda(jugadoresFiltrados);
+                } catch (error) {
+                    console.error('Error al buscar jugadores:', error);
+                    searchResults.innerHTML = `
+                        <div class="alert alert-danger">
+                            Error al buscar jugadores. Por favor intenta nuevamente.
+                        </div>
+                    `;
+                }
+            }
+
+            function mostrarResultadosBusqueda(jugadores) {
+                if (jugadores.length === 0) {
+                    searchResults.innerHTML = `
+                        <div class="search-message">
+                            No se encontraron jugadores con los criterios especificados
+                        </div>
+                    `;
+                    return;
+                }
+
+                searchResults.innerHTML = '';
+                jugadores.forEach(jugador => {
+                    const isSelected = estaJugadorSeleccionado(jugador.id);
+                    const card = document.createElement('div');
+                    card.className = `player-card ${isSelected ? 'selected' : ''}`;
+                    card.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="position-badge">${jugador.posicion}</span>
+                                <span class="fw-bold">${jugador.nombre}</span>
+                            </div>
+                            <div class="stats-container">
+                                <span>PPP: ${jugador.puntos_por_partido}</span>
+                                <span>RPP: ${jugador.rebotes_por_partido}</span>
+                                <span>APP: ${jugador.asistencias_por_partido}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    if (!isSelected) {
+                        card.addEventListener('click', () => seleccionarJugador(jugador));
+                    }
+
+                    searchResults.appendChild(card);
+                });
+            }
+
+            function estaJugadorSeleccionado(jugadorId) {
+                return equipoActual.titulares.includes(jugadorId) || 
+                       equipoActual.suplentes.includes(jugadorId);
+            }
+
+            function seleccionarJugador(jugador) {
+                const posicionIndex = posiciones.indexOf(jugador.posicion);
+                
+                if (equipoActual.titulares[posicionIndex] === null) {
+                    equipoActual.titulares[posicionIndex] = jugador.id;
+                } else if (equipoActual.suplentes[posicionIndex] === null) {
+                    equipoActual.suplentes[posicionIndex] = jugador.id;
+                } else {
+                    alert('Ya hay dos jugadores seleccionados para esta posición');
+                    return;
+                }
+
+                actualizarVistaEquipo();
+                buscarJugadores(); // Actualizar la búsqueda para reflejar la selección
+            }
+
+            function actualizarVistaEquipo() {
+                const titularesContainer = document.getElementById('titularesContainer');
+                const suplentesContainer = document.getElementById('suplentesContainer');
+
+                titularesContainer.innerHTML = '';
+                suplentesContainer.innerHTML = '';
+
+                equipoActual.titulares.forEach((jugadorId, index) => {
+                    if (jugadorId) {
+                        const jugador = jugadoresCargados.find(j => j.id === jugadorId);
+                        if (jugador) {
+                            titularesContainer.appendChild(crearCardJugador(jugador, 'titular', index));
+                        }
+                    }
+                });
+
+                equipoActual.suplentes.forEach((jugadorId, index) => {
+                    if (jugadorId) {
+                        const jugador = jugadoresCargados.find(j => j.id === jugadorId);
+                        if (jugador) {
+                            suplentesContainer.appendChild(crearCardJugador(jugador, 'suplente', index));
+                        }
+                    }
+                });
+            }
+
+            function crearCardJugador(jugador, tipo, index) {
+                const div = document.createElement('div');
+                div.className = 'player-card';
+                div.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="position-badge">${jugador.posicion}</span>
+                            <span class="fw-bold">${jugador.nombre}</span>
+                        </div>
+                        <button class="btn btn-sm btn-danger remove-player">✕</button>
+                    </div>
+                    <div class="stats-container">
+                        <span>PPP: ${jugador.puntos_por_partido}</span>
+                        <span>RPP: ${jugador.rebotes_por_partido}</span>
+                        <span>APP: ${jugador.asistencias_por_partido}</span>
+                    </div>
+                `;
+
+                div.querySelector('.remove-player').addEventListener('click', () => {
+                    if (tipo === 'titular') {
+                        equipoActual.titulares[index] = null;
+                    } else {
+                        equipoActual.suplentes[index] = null;
+                    }
+                    actualizarVistaEquipo();
+                    buscarJugadores();
+                });
+
+                return div;
+            }
+
+            async function guardarEquipo() {
+                const nombreEquipo = document.getElementById('teamName').value;
+                if (!nombreEquipo) {
+                    alert('Por favor ingresa un nombre para el equipo');
+                    return;
+                }
+
+                const jugadoresSeleccionados = [
+                    ...equipoActual.titulares,
+                    ...equipoActual.suplentes
+                ].filter(id => id !== null);
+
+                if (jugadoresSeleccionados.length === 0) {
+                    alert('Por favor selecciona al menos un jugador');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/crear_equipo', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            nombre: nombreEquipo,
+                            tipo: 'personalizado',
+                            jugadores: jugadoresSeleccionados
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert('Equipo guardado exitosamente');
+                        window.location.href = '/mis_equipos';
+                    } else {
+                        alert(data.error || 'Error al guardar el equipo');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error al guardar el equipo');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+{% endblock %}

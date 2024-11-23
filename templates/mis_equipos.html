@@ -1,0 +1,54 @@
+{% extends "base.html" %} 
+{% block content %}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Mis Equipos</h2>
+        <a href="{{ url_for('armar_equipo') }}" class="btn btn-primary">Armar Nuevo Equipo</a>
+    </div>
+
+    <div class="row">
+        {% for equipo in equipos %}
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ equipo.nombre }}</h5>
+                    <span class="badge bg-{{ 'success' if equipo.tipo == 'ofensivo' else 'warning' if equipo.tipo == 'defensivo' else 'info' }}">
+                        {{ equipo.tipo|title }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p>Creado el: {{ equipo.fecha_creacion.strftime('%d/%m/%Y') }}</p>
+                    <h6>Jugadores:</h6>
+                    <div class="list-group">
+                        {% for jugador in equipo.jugadores %}
+                        <div class="list-group-item list-group-item-action cursor-pointer" data-jugador-id="{{ jugador.id }}">
+                            {{ jugador.nombre }} - {{ jugador.posicion }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="modal fade" id="jugadorModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detalles-del-jugador">Detalles del Jugador</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="jugadorDetalles">
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/equipos.js') }}"></script>
+{% endblock %}
